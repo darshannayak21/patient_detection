@@ -11,7 +11,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - [%(levelname)s] - %(message)s',
     handlers=[
-        logging.FileHandler("bedside_monitor.log"), # Saves logs to a file
+        logging.FileHandler("bedside_monitor.log"), # General system logs
         logging.StreamHandler(sys.stdout)           # Prints to terminal
     ]
 )
@@ -29,7 +29,7 @@ except ImportError:
 
 # --- Configuration ---
 MODEL_PATH = "ssd_mobilenet_v2.tflite"
-PATIENCE_SECONDS = 300  # 5 minutes
+PATIENCE_SECONDS = 300  # 300 seconds = 5 minutes absence threshold
 CONFIDENCE_THRESHOLD = 0.55
 PERSON_CLASS_ID = 0 
 MIN_PERSON_AREA = 0.10  # Patient must take up at least 10% of the frame (ignores TVs/Photos)
@@ -49,6 +49,27 @@ signal.signal(signal.SIGTERM, signal_handler)
 def is_raspberry_pi():
     machine = platform.machine().lower()
     return 'arm' in machine or 'aarch64' in machine
+
+
+# ==========================================
+# 🚨 THE ALERT SYSTEM 🚨
+# ==========================================
+def trigger_alert(elapsed_seconds):
+    """
+    This function fires exactly when the patient has been missing for 5 minutes.
+    This is where your logs, alarms, and notifications happen!
+    """
+    # 1. Log the critical error to the system console
+    logging.critical(f"🚨 ALERT: Patient absent for {int(elapsed_seconds)} seconds! 🚨")
+    
+    # 2. Write to a permanent 'Incident Report' file
+    with open("INCIDENT_ALERTS.txt", "a") as f:
+        f.write(f"[{time.ctime()}] ALARM TRIGGERED: Patient missing for {int(elapsed_seconds/60)} minutes.\n")
+    
+    # 3. FUTURE EXPANSION: Here is where you will add code to notify the nurses.
+    # For example, sending an SMS using Twilio or hitting a hospital API:
+    # requests.post("http://nurse-station-api.local/alert", json={"bed": 12, "status": "empty"})
+
 
 # --- Camera Abstraction ---
 class PiCam:
@@ -175,10 +196,9 @@ def main():
                     draw.rectangle([0, 0, orig_width, orig_height], outline="red", width=15)
                     draw.text((20, 40), "ALERT: BED EMPTY", fill="red", font=font)
                     
-                    # Fire the API strictly ONCE per absence event
+                    # 🔥 FIRE THE ALERT FUNCTION ONCE 🔥
                     if not alert_triggered:
-                        logging.critical(f"ALERT: Patient absent for {int(elapsed)} seconds. Firing Webhook!")
-                        # ---> PUT YOUR API CODE HERE (requests.post, SMS, etc) <---
+                        trigger_alert(elapsed)
                         alert_triggered = True
 
             # Display
