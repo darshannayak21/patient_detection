@@ -1,0 +1,58 @@
+# Raspberry Pi Deployment Guide
+
+This guide explains how to set up and run the [bedside_monitor.py](file:///d:/patient_detection/bedside_monitor.py) on your Raspberry Pi (32-bit/Bookworm).
+
+## 1. System Dependencies (APT)
+The `face_recognition` library requires specific C++ libraries to compile its high-performance backends. Open your terminal on the Pi and run:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install python3-pip python3-venv cmake libopenblas-dev liblapack-dev libjpeg-dev libatlas-base-dev -y
+```
+
+## 2. Environment Setup
+It is highly recommended to use a Virtual Environment to keep the Pi's system python clean.
+
+```bash
+# Create and activate the environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install the core requirements
+pip install --no-cache-dir -r requirements.txt
+
+# Install the TFLite Runtime for ARM (Fastest inference)
+pip install --extra-index-url https://google-coral.github.io/py-repo/ tflite-runtime
+```
+
+## 3. Explaining the [requirements.txt](file:///d:/patient_detection/requirements.txt)
+You noticed this line:
+`opencv-python>=4.9.0.80; sys_platform == "win32" or sys_platform == "darwin" or platform_machine == "x86_64" or platform_machine == "AMD64"`
+
+**What it means:** This is called an **Environment Marker**.
+- `sys_platform == "win32"`: Only install if on Windows.
+- `sys_platform == "darwin"`: Only install if on macOS.
+- `platform_machine == "x86_64"`: Only install if on a standard PC.
+
+**Because your Raspberry Pi is "armv7l" or "aarch64", none of these conditions match.** Therefore, `pip` will **skip** installing OpenCV on your Pi entirely. This ensures the Pi stays lightweight and uses `picamera2` as requested.
+
+## 4. Why it works without OpenCV
+In [bedside_monitor.py](file:///d:/patient_detection/bedside_monitor.py), the code detects your hardware automatically:
+
+```python
+if is_raspberry_pi():
+    # Uses native PiCamera2 (No OpenCV needed)
+    camera = PiCam()
+else:
+    # Uses OpenCV (Only on PC/Mac)
+    camera = PygameCam()
+```
+
+The [PiCam](file:///d:/patient_detection/bedside_monitor.py#86-100) class uses the modern `picamera2` library which communicates directly with the Pi's camera stack. It provides raw `RGB888` arrays that my code converts directly into `PIL` images for detection, completely bypassing the need for OpenCV's `VideoCapture`.
+
+## 5. Running the Monitor
+Ensure you have `patient_face.jpg` in the folder, then run:
+
+```bash
+python3 bedside_monitor.py
+```
